@@ -1,230 +1,272 @@
-var User = require('./user.js');
+var router = require('express').Router();
+var https = require('https');
+var User = require('./models/User.js');
+var twClient = require('./twilio_config.js');
 
-module.exports = function(app, passport) {
+// create a new user
+router.post('/users', authorize, function(req, res) {
 
-  // process the signup form
-  app.post('/signup', passport.authenticate('local-signup'), function (req, res) {
-    res.status(201).send('Signup successful');
-  });
+  User.findOne({ email: req.email }, function(err, user) {
 
-  app.delete('/', isLoggedIn, function (req, res){
-    var user = req.user;
-    user.remove(function (err) {
-      if (err) {
-        return res.status(400).send('ERROR: User not deleted');
-      }
-    });
-    req.logout();
-    res.status(200).send('User deleted');
-  });
-
-  // process the login form
-  app.post('/login', passport.authenticate('local-login'), function (req, res) {
-    res.status(201).json(req.user);
-  });
-
-  app.get('/logout', isLoggedIn, function (req, res){
-    req.logout();
-    res.status(200).send('User logged out');
-  });
-
-  app.put('/classes', isLoggedIn, function (req, res) {
-
-    var user = req.user;
-    user.classes.push(req.body);
-    user.save(function(err) {
+    if (err) {
+      res.status(500).send(err);
+    } else if (user){
+      res.status(400).send('A user with this email already exists.');
+    } else {
+      User.create({ email: req.email, phone: req.body.phone, rate: req.body.rate }, function(err, created) {
         if (err) {
-          console.log(err);
-          res.status(418).send('Error! Class not added.');
+          res.status(500).send(err);
         } else {
-          res.status(201).send('Class added to queue.');
+          res.status(201).send(created);
         }
-    });
-
-  });
-
-  app.get('/classes', isLoggedIn, function (req, res) {
-    res.status(200).send(req.user.classes);
-  });
-
-  app.delete('/classes', isLoggedIn, function (req, res) {
-    for (var i = 0; i < req.user.classes.length; i++) {
-      if (req.user.classes[i].classID == req.query.delete) {
-        req.user.classes[i].remove(function (err) {
-          if (err) {
-            res.status(400).send('ERROR: Class not deleted');
-          }
-        });
-        req.user.save(function (err) {
-          if (err) {
-            return res.status(400).send('ERROR: Class not deleted');
-          }
-        });
-        return res.status(200).send('Class deleted');
-      }
+      });
     }
-    return res.status(400).send('Class not found');
-  });
-
-  app.put('/bikes', isLoggedIn, function (req, res) {
-
-    req.user.bikes[req.body.studio].addToSet(req.body.bikeNo);
-    req.user.save(function (err) {
-      if (err) {
-        res.status(500).send('ERROR: Bike number not saved');
-      } else {
-        res.sendStatus(201);
-      }
-    });
 
   });
 
-  app.post('/rez', function (req, res) {
+});
 
-    // if (req.user.local.email == 'pedro@pedrotp.com') {
+// edit user details
+router.patch('/users', authorize, function(req, res) {
 
-      User.find({}, function (err, users) {
+  User.findOne({ email: req.email }, function(err, user) {
+
+    if (err) {
+      res.status(500).send(err);
+    } else if (user){
+      user.update(req.body, function(err, anything) {
         if (err) {
-          console.log(err);
-          res.sendStatus(400);
+          res.status(500).send(err);
         } else {
-          users.forEach(function (u) {
-            u.makeReservations();
-          });
-          res.sendStatus(200);
+          res.status(200).send('User updated.');
+        }
+      })
+    } else {
+      res.status(404).send('User not found.');
+    }
+
+  });
+
+});
+
+// get authenticated user
+router.get('/users', authorize, function(req, res) {
+
+  User.findOne({ email: req.email }, function(err, user) {
+
+    if (err) {
+      res.status(500).send(err);
+    } else if (user){
+      res.status(200).send(user);
+    } else {
+      res.status(404).send('User not found.');
+    }
+
+  });
+
+});
+
+// delete authenticated user
+router.delete('/users', authorize, function(req, res) {
+
+  User.findOneAndRemove({ email: req.email }, function(err, user) {
+
+    if (err) {
+      res.status(500).send(err);
+    } else if (user){
+      res.status(200).send('User ' + user.email + ' deleted.');
+    } else {
+      res.status(404).send('User not found.');
+    }
+
+  });
+
+});
+
+// create new client for authenticated user
+router.post('/clients', authorize, function(req, res) {
+
+  User.findOne({ email: req.email }, function(err, user) {
+
+    if (err) {
+      res.status(500).send(err);
+    } else if (user){
+      user.clients.push(req.body);
+
+      user.save(function (err) {
+        if (err) {
+          res.status(500).send(err);
+        } else {
+          var subdoc = user.clients[user.clients.length - 1];
+          res.status(200).send(subdoc);
         }
       });
 
-    // } else {
-    //   res.sendStatus(401);
-    // }
-
-  });
-
-};
-
-// route middleware to make sure a user is logged in
-function isLoggedIn(req, res, next) {
-
-    // if user is authenticated in the session, carry on
-    if (req.isAuthenticated())
-        return next();
-
-    // if they aren't redirect them to the home page
-    res.sendStatus(401);
-};
-var User = require('./user.js');
-
-module.exports = function(app, passport) {
-
-  // process the signup form
-  app.post('/signup', passport.authenticate('local-signup'), function (req, res) {
-    res.status(201).send('Signup successful');
-  });
-
-  app.delete('/', isLoggedIn, function (req, res){
-    var user = req.user;
-    user.remove(function (err) {
-      if (err) {
-        return res.status(400).send('ERROR: User not deleted');
-      }
-    });
-    req.logout();
-    res.status(200).send('User deleted');
-  });
-
-  // process the login form
-  app.post('/login', passport.authenticate('local-login'), function (req, res) {
-    res.status(201).json(req.user);
-  });
-
-  app.get('/logout', isLoggedIn, function (req, res){
-    req.logout();
-    res.status(200).send('User logged out');
-  });
-
-  app.put('/classes', isLoggedIn, function (req, res) {
-
-    var user = req.user;
-    user.classes.push(req.body);
-    user.save(function(err) {
-        if (err) {
-          console.log(err);
-          res.status(418).send('Error! Class not added.');
-        } else {
-          res.status(201).send('Class added to queue.');
-        }
-    });
-
-  });
-
-  app.get('/classes', isLoggedIn, function (req, res) {
-    res.status(200).send(req.user.classes);
-  });
-
-  app.delete('/classes', isLoggedIn, function (req, res) {
-    for (var i = 0; i < req.user.classes.length; i++) {
-      if (req.user.classes[i].classID == req.query.delete) {
-        req.user.classes[i].remove(function (err) {
-          if (err) {
-            res.status(400).send('ERROR: Class not deleted');
-          }
-        });
-        req.user.save(function (err) {
-          if (err) {
-            return res.status(400).send('ERROR: Class not deleted');
-          }
-        });
-        return res.status(200).send('Class deleted');
-      }
+    } else {
+      res.status(404).send('User not found.');
     }
-    return res.status(400).send('Class not found');
-  });
-
-  app.put('/bikes', isLoggedIn, function (req, res) {
-
-    req.user.bikes[req.body.studio].addToSet(req.body.bikeNo);
-    req.user.save(function (err) {
-      if (err) {
-        res.status(500).send('ERROR: Bike number not saved');
-      } else {
-        res.sendStatus(201);
-      }
-    });
 
   });
 
-  app.post('/rez', function (req, res) {
+});
 
-    // if (req.user.local.email == 'pedro@pedrotp.com') {
+// get all clients for authorized user
+router.get('/clients', authorize, function(req, res) {
 
-      User.find({}, function (err, users) {
-        if (err) {
-          console.log(err);
-          res.sendStatus(400);
+  User.findOne({ email: req.email }, function(err, user) {
+
+    if (err) {
+      res.status(500).send(err);
+    } else if (user){
+      res.status(200).send(user.clients);
+    } else {
+      res.status(404).send('User not found.');
+    }
+
+  });
+
+});
+
+// retrieve a specific client
+router.get('/clients/:id', authorize, function(req, res) {
+
+  User.findOne({ email: req.email }, function(err, user) {
+
+    if (err) {
+      res.status(500).send(err);
+    } else if (user){
+        var client = user.clients.id(req.params.id);
+        if (client) {
+          res.status(200).send(client);
         } else {
-          users.forEach(function (u) {
-            u.makeReservations();
-          });
-          res.sendStatus(200);
+          res.status(404).send('Client id not found.');
         }
-      });
-
-    // } else {
-    //   res.sendStatus(401);
-    // }
+    } else {
+      res.status(404).send('User not found.');
+    }
 
   });
 
+});
+
+// edit a specific client
+router.patch('/clients/:id', authorize, function(req, res) {
+
+  User.findOne({ email: req.email }, function(err, user) {
+
+    if (err) {
+      res.status(500).send(err);
+    } else if (user){
+        var client = user.clients.id(req.params.id);
+        if (client) {
+          var keys = Object.keys(req.body);
+          keys.forEach(function(key) {
+            if (client[key] != null) {
+              client[key] = req.body[key];
+            }
+          });
+          user.save();
+          res.status(200).send(user.clients.id(req.params.id));
+        } else {
+          res.status(404).send('Client id not found.');
+        }
+    } else {
+      res.status(404).send('User not found.');
+    }
+
+  });
+
+});
+
+// delete a specific client
+router.delete('/clients/:id', authorize, function(req, res) {
+
+  User.findOne({ email: req.email }, function(err, user) {
+
+    if (err) {
+      res.status(500).send(err);
+    } else if (user){
+      var deleted = user.clients.id(req.params.id);
+      if (deleted) {
+        deleted.remove();
+        user.save();
+        res.status(200).send(deleted);
+      } else {
+        res.status(404).send('Client id not found.');
+      }
+    } else {
+      res.status(404).send('User not found.');
+    }
+
+  });
+
+});
+
+// send an sms reminder to a client about their balance
+router.put('/clients/:id/alert', authorize, function(req, res) {
+
+  User.findOne({ email: req.email }, function(err, user) {
+
+    if (err) {
+      res.status(500).send(err);
+    } else if (user){
+        var client = user.clients.id(req.params.id);
+        if (client) {
+          var msg = 'Hi there, this is a payment reminder for the $' + client.balance + ' you have outstanding. Email ' + user.email + ' to pay. Thanks!';
+          twClient.messages.create({
+              body: msg,
+              to: client.phone,
+              from: '+18318882253'
+          }).then(function(err, message) {
+            if (err) {
+              res.status(500).send(err);
+            } else {
+              res.status(200).send('Payment reminder sent to client ' + user.fullname);
+            }
+          });
+        } else {
+          res.status(404).send('Client id not found.');
+        }
+    } else {
+      res.status(404).send('User not found.');
+    }
+
+  });
+
+});
+
+// this middleware authorizes requests using Google
+function authorize(req, res, next) {
+
+  var options = {
+    hostname: 'www.googleapis.com',
+    path: '/plus/v1/people/me',
+    method: 'GET',
+    headers: {
+      'Authorization': 'Bearer ' + req.headers['x-access-token']
+    }
+  };
+
+  var request = https.request(options, function(response) {
+    response.setEncoding('utf8');
+    var message = "";
+    response.on('data', function (chunk) {
+      message += chunk;
+    });
+    response.on('end', function () {
+        message = JSON.parse(message);
+        if (message.error) {
+          res.status(message.error.code).send(message.error.message);
+        } else {
+          var email = message.emails[0].value;
+          req.email = email;
+          next();
+        }
+    });
+  });
+
+  request.end();
+
 };
 
-// route middleware to make sure a user is logged in
-function isLoggedIn(req, res, next) {
-
-    // if user is authenticated in the session, carry on
-    if (req.isAuthenticated())
-        return next();
-
-    // if they aren't redirect them to the home page
-    res.sendStatus(401);
-};
+module.exports = router;

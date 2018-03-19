@@ -2,19 +2,21 @@
   "name": "cs496-final-project",
   "version": "1.0.0",
   "description": "Final Project for CS496 Mobile/Cloud Software Development",
-  "main": "app.js",
+  "main": "app/server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Pedro Torres-Mackie (torresmp)",
   "license": "ISC",
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "body-parser": "^1.18.2",
-    "cookie-parser": "^1.4.3",
     "express": "^4.16.2",
-    "express-session": "^1.15.6",
+    "https": "^1.0.0",
+    "jsonwebtoken": "^8.2.0",
     "mongoose": "^5.0.9",
     "morgan": "^1.9.0",
-    "passport": "^0.4.0"
+    "querystring": "^0.2.0",
+    "twilio": "^3.13.1"
   }
 }
